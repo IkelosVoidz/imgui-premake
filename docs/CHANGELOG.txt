@@ -41,11 +41,14 @@ HOW TO UPDATE?
 
 THIS VERSION CONTAINS THE LARGEST AMOUNT OF BREAKING CHANGES SINCE 2015!
 I TRIED REALLY HARD TO KEEP THEM TO A MINIMUM, REDUCE THE AMOUNT OF INTERFERENCES,
-BUT INEVITABLY SOME USERS WILL BE AFFECTED.
+BUT INEVITABLY SOME USERS OR THIRD-PARTY EXTENSIONS WILL BE AFFECTED.
 
 IN ORDER TO HELP US IMPROVE THE TRANSITION PROCESS, INCL. DOCUMENTATION AND COMMENTS,
 PLEASE REPORT **ANY** DOUBT, CONFUSION, QUESTIONS, FEEDBACK TO:
     https://github.com/ocornut/imgui/issues/
+If you are using custom widgets, internals or third-party extension that are somehow
+breaking and aren't obvious how to solve, please post in Issues so we can gather
+data and share solutions that may help others.
 
 As part of the plan to reduce impact of API breaking changes, several unfinished
 changes/features/refactors related to font and text systems and scaling will be
@@ -115,8 +118,8 @@ Breaking changes:
   to 4096 but that limit isn't necessary anymore, and Renderer_TextureMaxWidth covers this)
   However you may set TexMinWidth = TexMaxWidth for the same effect.
 - Fonts: if you create and manage ImFontAtlas instances yourself (instead of relying on
-  ImGuiContext to create one, you'll need to set the atlas->RendererHasTextures field
-  and call ImFontAtlasUpdateNewFrame() yourself. An assert will trigger if you don't.
+  ImGuiContext to create one, you'll need to call ImFontAtlasUpdateNewFrame() yourself.
+  An assert will trigger if you don't.
 - Fonts: obsolete ImGui::SetWindowFontScale() which is not useful anymore. Prefer using
   PushFontSize(style.FontSizeBase * factor) or to manipulate other scaling factors.
 - Fonts: obsoleted ImFont::Scale which is not useful anymore.
@@ -158,6 +161,9 @@ Breaking changes:
      - renamed ImGuiFreeType::GetBuilderForFreeType() to ImGuiFreeType::GetFontLoader()
        - old:  io.Fonts->FontBuilderIO = ImGuiFreeType::GetBuilderForFreeType()
        - new:  io.Fonts.FontLoader = ImGuiFreeType::GetFontLoader();
+- DrawList: Fixed a regression from 1.91.1 where a Begin()/PushFont()/AddImage() sequence 
+  would not restore the correct atlas Texture Identifier when the PushFont() call used 
+  a font from a different atlas. (#8694, caused by #3224, #3875, #6398, #7903)
 - DrawList: Renamed ImDrawList::PushTextureID()/PopTextureID() to PushTexture()/PopTexture().
 - Fonts: (users of custom rectangles)
   - Renamed AddCustomRectRegular() to AddCustomRect(). (#8466)
@@ -299,9 +305,14 @@ Other changes:
   codepath that preserve last contents size when collapsed, resulting in
   programmatically uncollapsing auto-sizing windows having them flicker size
   for a frame. (#7691) [@achabense]
+- Windows: clicking on a window close button doesn't claim focus and bring to front. (#8683)
 - Windows: loosened code to allow hovering of resize grips, borders, and table
   borders while hovering a sibling child window, so that the code in master matches
   one in docking (they accidentally diverged). (#8554)
+- Windows: BeginChild(): fixed being unable to combine manual resize on one axis
+  and automatic resize on the other axis. (#8690)
+  e.g. neither ImGuiChildFlags_ResizeX | ImGuiChildFlags_AutoResizeY 
+            or ImGuiChildFlags_ResizeY | ImGuiChildFlags_AutoResizeX worked before.
 - TreeNode: added experimental flags to draw tree hierarchy outlines linking
   parent and tree nodes: (#2920)
   - ImGuiTreeNodeFlags_DrawLinesNone: No lines drawn (default value in style.TreeLinesFlags).
@@ -325,6 +336,9 @@ Other changes:
 - TreeNode: fixed incorrect clipping of arrow/bullet when using ImGuiTreeNodeFlags_SpanAllColumns.
 - InputText: fixed cursor positioning issue using up/down keys near end of lines while
   editing non-ASCII text. (Regression from 1.91.2) (#8635, #7925)
+- InputText: fixed a buffer overrun that could happen when using dynamically resizing 
+  buffers (e.g. imgui_stdlib.cpp for std::string, or ImGuiInputTextFlags_CallbackRezize)
+  and programmatically making an insertion. (#8689) [@ocornut, @m9710797]
 - Tables: fixed TableHeader() eager vertical clipping of text which may be noticeable
   with FramePadding.y was too small. (#6236)
 - Tables: fixed an assert when combining Tables, Frozen Rows, Clipper and BeginMultiSelect()
@@ -361,18 +375,40 @@ Other changes:
   of WantVisible. This is set in the same structure because activating text input generally
   requires providing a window to the backend. (#8584, #6341)
 - Misc: added extra operators to ImVec4 in IMGUI_DEFINE_MATH_OPERATORS block. (#8510) [@gan74]
+- Misc: removed static linkage from operators to facilitate using in C++ modules. (#8682, #8358) [@johmani]
 - Demo: changed default framed item width to use Min(GetFontSize() * 12, GetContentRegionAvail().x * 0.40f).
-- Backends:
-  - Backends: DX9/DX10/DX11/DX12, Vulkan, OpenGL2/3, Metal, SDLGPU3, SDLRenderer2/3, Allegro5:
+- Renderer Backends:
+  - Backends: DX9/DX10/DX11/DX12, Vulkan, OpenGL2/3, Metal, SDLGPU3, SDLRenderer2/3, WebGPU, Allegro5:
     - Added ImGuiBackendFlags_RendererHasTextures support. (#8465, #3761, #3471)
       [@ocornut, @ShironekoBen, @thedmd]
     - Added ImGui_ImplXXXX_UpdateTexture(ImTextureData* tex) functions for all backend.
       Available if you want to start uploading textures right after ImGui::Render() and without
       waiting for the call to ImGui_ImplXXXX_RenderDrawData(). Also useful if you use a staged or
       multi-threaded rendering schemes, where you might want to set ImDrawData::Textures = NULL. (#8597, #1860)
+  - Backends: SDLGPU3: Fixed creating atlas texture earlier than other backends, preventing
+    to load fonts between the Init and NewFrames calls.
+  - Backends: SDLGPU3: Made ImGui_ImplSDLGPU3_PrepareDrawData() reuse GPU Transfer Buffers which
+    were unusually slow to recreate every frame. Much faster now. (#8534) [@ocornut, @TheMode]
+  - Backends: SDLGPU3: added support for ImDrawCallback_ResetRenderState. (#8599)
+  - Backends: OpenGL3: made GLES 3.20 contexts not access GL_CONTEXT_PROFILE_MASK nor
+    GL_PRIMITIVE_RESTART. (#8664) [@DyXel]
+  - Backends: DirectX12: Fixed build on MinGW. (#8702, #4594) [@playday3008]
+  - Backends: DirectX10, DirectX11, DirectX12: Honor FramebufferScale to allow for custom
+    platform backends and experiments using it (consistently with other renderer backends,
+    even though in normal condition it is not set under Windows). (#8412) [@WSSDude]
+  - Backends: Vulkan: Deep-copy ImGui_ImplVulkan_InitInfo::PipelineRenderingCreateInfo's
+    pColorAttachmentFormats buffer when set, in order to reduce common user-error of
+    specifying a pointer to data that gets out of scope. (#8282)
+  - Backends: Vulkan: Load dynamic rendering functions using vkGetDeviceProcAddr()
+    + try both non-KHR and KHR versions. (#8600, #8326, #8365) [@ChrisTom-94]
+  - Backends: Vulkan: fixed validation errors in window create/resize helpers used by examples
+    and by multi-viewports implementation, which would typically trigger errors while detaching
+    secondary viewports. (#8600, #8176) [@ChrisTom-94]
+- Platform Backends:
   - Backends: GLFW: added ImGui_ImplGlfw_GetContentScaleForMonitor(), ImGui_ImplGlfw_GetContentScaleForWindow()
     helpers. They are wrappers to glfwGetMonitorContentScale()/glfwGetWindowContentScale(), with compile-time
     GLFW version checks + returning 1.0f on Apple platform.
+  - Backends: GLFW: Added support for multiple Dear ImGui contexts. (#8676, #8239, #8069)
   - Backends: SDL2: added ImGui_ImplSDL2_GetDpiScaleForDisplay() and ImGui_ImplSDL2_GetContentScaleForWindow()
     helpers. They are wrappers to SDL_GetDisplayDPI(), with compile-time SDL version checks + returning 1.0f
     on Apple platforms. SDL3 already does this by default.
@@ -388,24 +424,8 @@ Other changes:
     memory ownership change. (#8530, #7801) [@Green-Sky]
   - Backends: SDL3: honor ImGuiPlatformImeData->WantTextInput as an alternative
     way to call SDL_StartTextInput(), without IME being necessarily visible. (#8584)
-  - Backends: SDLGPU3: Fixed creating atlas texture earlier than other backends, preventing
-    to load fonts between the Init and NewFrames calls.
-  - Backends: SDLGPU3: Made ImGui_ImplSDLGPU3_PrepareDrawData() reuse GPU Transfer Buffers which
-    were unusually slow to recreate every frame. Much faster now. (#8534) [@ocornut, @TheMode]
-  - Backends: SDLGPU3: added support for ImDrawCallback_ResetRenderState. (#8599)
-  - Backends: OpenGL3: made GLES 3.20 contexts not access GL_CONTEXT_PROFILE_MASK nor
-    GL_PRIMITIVE_RESTART. (#8664) [@DyXel]
-  - Backends: DirectX10, DirectX11, DirectX12: Honor FramebufferScale to allow for custom
-    platform backends and experiments using it (consistently with other renderer backends,
-    even though in normal condition it is not set under Windows). (#8412) [@WSSDude]
-  - Backends: Vulkan: Deep-copy ImGui_ImplVulkan_InitInfo::PipelineRenderingCreateInfo's
-    pColorAttachmentFormats buffer when set, in order to reduce common user-error of
-    specifying a pointer to data that gets out of scope. (#8282)
-  - Backends: Vulkan: Load dynamic rendering functions using vkGetDeviceProcAddr()
-    + try both non-KHR and KHR versions. (#8600, #8326, #8365) [@ChrisTom-94]
-  - Backends: Vulkan: fixed validation errors in window create/resize helpers used by examples
-    and by multi-viewports implementation, which would typically trigger errors while detaching
-    secondary viewports. (#8600, #8176) [@ChrisTom-94]
+  - Backends: OSX: ImGui_ImplOSX_HandleEvent() only process event for window containing
+    our view. (#8644) [@BingoXuan]
 - Examples:
   - Examples: Made many examples DPI aware by default.
     The single-viewport is basically:
