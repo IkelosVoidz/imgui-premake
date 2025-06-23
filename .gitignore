@@ -75,6 +75,40 @@ examples/example_sdl3_vulkan/example_sdl3_vulkan
 
 
 
-/bin/*
-/bin-int/*
+/bin/
+/bin-int/
+# Visual Studio files
+*.vcproj
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.user
+*.suo
+*.ncb
+*.pdb
+*.opendb
+*.opensdf
+*.sdf
+
+# VS Code files
+.vscode/
+*.code-workspace
+
+# Build artifacts
+*.obj
+*.exe
+*.dll
+*.lib
+*.app
+*.log
+*.nupkg
+*.csproj.user
+*.csproj.nuget.g.targets
+*.csproj.nuget.g.props
+
+# Other IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
 
