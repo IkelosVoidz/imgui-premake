@@ -2,7 +2,6 @@ project "ImGui"
 	kind "StaticLib"
 	language "C++"
     staticruntime "on"
-
 	targetdir ("bin/" .. OutputDir .. "/%{prj.name}")
 	objdir ("bin-int/" .. OutputDir .. "/%{prj.name}")
 
@@ -22,7 +21,44 @@ project "ImGui"
 		"imstb_rectpack.h",
 		"imstb_textedit.h",
 		"imstb_truetype.h",
+        "imgui_demo.cpp",
 	}
+
+    includedirs
+    {
+        ".",
+        "%{IncludeDir.SFML}"
+    }
+
+    libdirs
+    {
+        "%{LibDir.SFML}"
+    }
+
+     filter "configurations:Debug"
+        links
+        {
+            "sfml-system-d.lib",
+            "sfml-graphics-d.lib",
+            "sfml-window-d.lib"
+        }
+        runtime "Debug"
+        symbols "On"
+
+    filter "configurations:Release"
+        links
+        {
+            "sfml-system.lib",
+            "sfml-graphics.lib",
+            "sfml-window.lib"
+        }
+        runtime "Release"
+        optimize "On"
+
+    filter "configurations:Dist"
+        runtime "Release"
+        optimize "on"
+        symbols "off"
 
 	filter "system:windows"
 		systemversion "latest"
@@ -32,16 +68,3 @@ project "ImGui"
 		pic "On"
 		systemversion "latest"
 		cppdialect "C++17"
-
-	filter "configurations:Debug"
-		runtime "Debug"
-		symbols "on"
-
-	filter "configurations:Release"
-		runtime "Release"
-		optimize "on"
-
-    filter "configurations:Dist"
-		runtime "Release"
-		optimize "on"
-        symbols "off"
