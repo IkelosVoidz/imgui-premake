@@ -8,6 +8,10 @@ project "ImGui"
 
 	files
 	{
+        "imconfig-SFML.h",
+        "imgui-SFML_export.h",
+        "imgui-SFML.cpp",
+        "imgui-SFML.h",
 		"imconfig.h",
 		"imgui.h",
 		"imgui.cpp",
@@ -18,7 +22,6 @@ project "ImGui"
 		"imstb_rectpack.h",
 		"imstb_textedit.h",
 		"imstb_truetype.h",
-		"imgui_demo.cpp",
 	}
 
 	filter "system:windows"
